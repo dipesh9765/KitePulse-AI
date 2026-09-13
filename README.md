@@ -142,58 +142,147 @@ trading/
 
 ---
 
-## Installation & Setup
+## Quick Start & Server Setup
+
+You can run KitePulse AI either with a **single one-click script** (recommended for Windows) or manually in two terminal tabs.
 
 ### Prerequisites
 - **Python**: 3.11, 3.12, or 3.13
 - **Node.js**: v18.0.0 or higher
-- **Zerodha Kite Connect Account** (Optional for Live Trading; Paper Trading works out of the box)
+- **Zerodha Kite Connect Developer Account** *(Optional: Paper Trading works out of the box with zero credentials!)*
 
-### 1. Backend Setup
+---
+
+### Option A: One-Click Quick Start (Windows)
+Double-click [`start_all.bat`](file:///d:/DEVELOPMENT/android/trading/start_all.bat) or run from PowerShell:
 ```powershell
-# Navigate to backend directory
+.\start_all.bat
+```
+This launcher automatically:
+1. Verifies the Python virtual environment and launches the **FastAPI Backend** on `http://127.0.0.1:8000`.
+2. Installs frontend dependencies (if missing) and starts the **Vite React UI** on `http://127.0.0.1:5173`.
+3. Opens the terminals side-by-side with color-coded status banners.
+
+---
+
+### Option B: Manual Setup & Server Execution
+
+#### 1. Backend Server Setup
+```powershell
+# 1. Navigate to the backend directory
 cd backend
 
-# Create and activate Python virtual environment
+# 2. Create and activate a Python virtual environment
 python -m venv venv
 .\venv\Scripts\Activate.ps1   # On Windows PowerShell
 # source venv/bin/activate    # On Linux / macOS
 
-# Install dependencies
+# 3. Install backend dependencies
 pip install -r requirements.txt
 
-# Configure environment variables
-cp .env.example .env   # On Windows: copy .env.example .env
-# Edit .env to add your Kite and Gemini API keys (or configure via Settings UI)
+# 4. (Optional) Create .env configuration file
+# NOTE: Credentials can also be configured securely directly through the Web UI!
+copy .env.example .env        # On Windows
+# cp .env.example .env        # On Linux / macOS
 
-# Run automated test suite
+# 5. Run the automated integration test suite (21 tests)
 pytest tests -v
 
-# Start FastAPI server
+# 6. Start the FastAPI ASGI backend server
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
+> The backend will be available at **`http://127.0.0.1:8000`** (Swagger docs at `/docs`).
 
-### 2. Frontend Setup
+#### 2. Frontend Terminal Setup
+In a second terminal window:
 ```powershell
-# Navigate to frontend directory
+# 1. Navigate to the frontend directory
 cd frontend
 
-# Install npm packages
+# 2. Install Node.js dependencies
 npm install
 
-# Verify build and linter
+# 3. Verify TypeScript build and linting
 npm run build
 npm run lint
 
-# Start Vite development server
+# 4. Start the Vite React development server
 npm run dev
 ```
+> The frontend terminal UI will be available at **`http://localhost:5173`**.
 
-### 3. Launching the Platform
-Open your browser at `http://localhost:5173`. Upon first launch:
-1. **Initialize Master Password**: Enter a secure master password (at least 6 characters). This derives your Fernet encryption key.
-2. **Configure Settings**: Open the Settings dialog to optionally provide Zerodha Kite API credentials and Google Gemini API keys. Credentials are encrypted into `backend/trading.db`.
-3. **Select Trading Mode**: Toggle between `PAPER` sandbox (virtual ₹1,00,000 capital) or `LIVE` (Zerodha Kite MIS Intraday).
+---
+
+## How It Can Be Used (User Walkthrough)
+
+KitePulse AI is designed for institutional-grade safety, disciplined risk management, and zero dummy data fabrication. Follow this end-to-end workflow:
+
+### 1. First-Time Vault Initialization
+1. Open your browser at **`http://localhost:5173`**.
+2. On first boot, the **Cryptographic Gatekeeper** modal prompts you to create a **Master Password** (minimum 6 characters).
+3. The system derives a 32-byte AES-128 Fernet key using PBKDF2-HMAC-SHA256 (100,000 rounds). **No plaintext credentials are ever stored on disk.**
+4. Your master password creates a 24-hour sliding session token stored in your browser.
+
+### 2. Configuring Broker & AI Credentials
+Click the **Settings (Gear Icon)** in the top navigation bar to open the Encrypted Vault:
+- **Zerodha Kite Connect**:
+  - `API Key` & `API Secret`: Found in your [Kite Developer Console](https://kite.trade/).
+  - `Access Token`: Generated daily after OAuth login, or paste your active session request token.
+- **Google Gemini AI**:
+  - `API Key`: Free from [Google AI Studio](https://aistudio.google.com/).
+  - `Model`: Defaults to `gemini-2.5-flash` for low-latency reasoning.
+- **Multi-Channel Notifications (Optional)**:
+  - Telegram Bot Token & Chat ID
+  - Discord Webhook URL
+  - Slack Webhook URL
+  - Desktop browser audio & visual chimes ("Office Mode" toggle).
+
+> **No Zerodha Account?** You can still test! KitePulse AI includes a **Paper Trading Sandbox** with simulated ₹1,00,000 capital and deterministic mathematical technical indicators.
+
+### 3. Choosing Your Trading Mode
+In the top header, use the mode toggle:
+- **`PAPER` (Default)**: Executes simulated trades within an in-memory virtual portfolio tracking real or mathematical prices with zero financial risk.
+- **`LIVE`**: Dispatches real MIS Intraday orders directly to the National Stock Exchange (NSE) via Zerodha KiteConnect. Guarded by a mandatory 30-second token verification heartbeat.
+
+### 4. Scanning Instruments & AI Reasoning
+1. Select an instrument from the left-hand **Watchlist** (e.g., `NIFTY 50`, `BANK NIFTY`, `RELIANCE`, `TCS`, `INFY`).
+2. The **TradingView Lightweight Chart** renders historical candles with technical indicators:
+   - Exponential Moving Averages (EMA 9, EMA 21, EMA 50)
+   - Volume Weighted Average Price (VWAP)
+   - Relative Strength Index (RSI 14)
+   - Average True Range (ATR 14)
+   - Dynamic Pivot Points (Support 1/2, Resistance 1/2)
+3. Click **"Scan Symbol"**:
+   - KitePulse AI extracts vector indicators and dispatches a structured prompt to Google Gemini.
+   - If the LLM is offline, the deterministic **Technical Fallback Engine** computes signals using classic quantitative momentum criteria.
+
+### 5. Human-in-the-Loop Voice & UI Approval
+When an opportunity is discovered, a **Trade Proposal Card** appears:
+- **Proposed Parameters**: Direction (`BUY` / `SELL`), Entry Price, Stop-Loss, Target 1, Target 2, Risk/Reward ratio, and Confidence score.
+- **Spoken Audio Pitch**: KitePulse AI synthesizes a concise, natural voice breakdown explaining the institutional rationale.
+- **60-Second Countdown**: The proposal automatically expires in 60 seconds if market conditions shift.
+- **Voice Command Radar**: Speak aloud `"Approve"` to authorize execution, or `"Reject"` to discard, or simply click the buttons in the UI.
+
+### 6. Managing Active Positions & Trailing SL
+- When approved, orders are logged into the immutable database and appear in the **Positions Table**.
+- Real-time mark-to-market (MTM) P&L updates every 2 seconds via authenticated WebSocket stream.
+- **Automated Square-Off**: The background engine continuously checks live prices against Stop-Loss and Target levels, auto-exiting when barriers are breached.
+- **Manual Square-Off**: Click **"Close Position"** anytime to exit immediately at current market price.
+
+### 7. Customizing Instruments
+To add or modify tracked symbols, edit external configuration file [`backend/instruments.json`](file:///d:/DEVELOPMENT/android/trading/backend/instruments.json):
+```json
+{
+  "symbol": "TATAMOTORS",
+  "kite_symbol": "NSE:TATAMOTORS",
+  "tradingsymbol": "TATAMOTORS",
+  "exchange": "NSE",
+  "lot_size": 1,
+  "type": "EQUITY",
+  "enabled": true
+}
+```
+No backend code changes are required when updating instruments.
 
 ---
 
