@@ -1,0 +1,98 @@
+# ==========================================
+# KitePulse AI - Comprehensive .gitignore
+# ==========================================
+
+# ------------------------------------------
+# Environment & Sensitive Credentials
+# ------------------------------------------
+.env
+.env.*
+*.env
+*.secret
+*.pem
+*.key
+*.token
+*.cert
+!.env.example
+!*.env.example
+
+# ------------------------------------------
+# Databases, Vaults & Local Data
+# ------------------------------------------
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backend/trading.db
+backend/test.db
+test.db
+trading.db
+
+# ------------------------------------------
+# Logs & Process Traces
+# ------------------------------------------
+logs/
+*.log
+backend/logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ------------------------------------------
+# Python Artifacts, Bytecode & Caches
+# ------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+
+# ------------------------------------------
+# Virtual Environments
+# ------------------------------------------
+venv/
+env/
+ENV/
+.venv/
+backend/venv/
+
+# ------------------------------------------
+# Frontend Dependencies & Bundles
+# ------------------------------------------
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# ------------------------------------------
+# Temporary, Scratch & Migration Files
+# ------------------------------------------
+scratch/
+backend/scratch/
+*.tmp
+*.bak
+
+# ------------------------------------------
+# IDEs & System Files
+# ------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+*.swp
+*.swo
+*~

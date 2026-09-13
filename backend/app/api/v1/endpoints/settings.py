@@ -1,0 +1,198 @@
+"""
+System Settings, Secure Vault & Broker Connectivity Endpoints
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+import database
+from app.config import settings, load_instruments_data
+from app.api.deps import require_auth
+from app.models.schemas import SettingsUpdateRequest, ModeUpdateRequest, KiteSessionRequest
+from kite_executor import kite_executor
+from gemini_analyzer import gemini_analyzer
+from market_data import market_data_manager
+from notifications import notification_service
+from server_logger import log_config_saved
+
+router = APIRouter(tags=["Settings"])
+
+
+@router.get("/api/settings", dependencies=[Depends(require_auth)])
+def get_settings():
+    """Returns masked previews of active configurations from the encrypted vault."""
+    k_key = database.get_secure_setting("KITE_API_KEY", "")
+    k_sec = database.get_secure_setting("KITE_API_SECRET", "")
+    k_tok = database.get_secure_setting("KITE_ACCESS_TOKEN", "")
+    g_key = database.get_secure_setting("GEMINI_API_KEY", "")
+
+    def mask_key(val: str) -> str:
+        if not val:
+            return ""
+        if len(val) <= 6:
+            return "••••••••"
+        return val[:3] + "••••••••" + val[-3:]
+
+    return {
+        "has_kite_api_key": bool(k_key),
+        "kite_api_key_preview": mask_key(k_key),
+        "has_kite_api_secret": bool(k_sec),
+        "kite_api_secret_preview": mask_key(k_sec),
+        "has_kite_access_token": bool(k_tok),
+        "kite_access_token_preview": mask_key(k_tok),
+        "has_gemini_api_key": bool(g_key),
+        "gemini_api_key_preview": mask_key(g_key),
+        "trading_mode": settings.TRADING_MODE,
+        "telegram_bot_token": notification_service.config.telegram_bot_token or "",
+        "telegram_chat_id": notification_service.config.telegram_chat_id or "",
+        "discord_webhook_url": notification_service.config.discord_webhook_url or "",
+        "slack_webhook_url": notification_service.config.slack_webhook_url or "",
+        "office_mode": notification_service.config.office_mode,
+        "gemini_active": bool(gemini_analyzer.client),
+        "kite_active": kite_executor.is_authenticated()
+    }
+
+
+@router.post("/api/notifications/test", dependencies=[Depends(require_auth)])
+async def test_notifications_endpoint():
+    """Sends a test alert across all configured communication channels."""
+    test_symbol = settings.WATCHLIST_SYMBOLS[0] if settings.WATCHLIST_SYMBOLS else "TEST"
+    test_proposal = {
+        "symbol": test_symbol,
+        "instrument": f"{test_symbol} TEST 25000 CE",
+        "signal_type": "BUY_CALL",
+        "entry_price": 125.0,
+        "stop_loss": 105.0,
+        "target_1": 165.0,
+        "risk_reward": "1:2.0",
+        "confidence": 95,
+        "verbal_pitch": f"Test notification for {test_symbol} from KitePulse AI",
+        "technical_rationale": "System verification of webhook channels"
+    }
+    await notification_service.notify_trade_proposal(test_proposal)
+    return {"success": True, "message": "Test alert dispatched to configured notification channels."}
+
+
+@router.post("/api/settings", dependencies=[Depends(require_auth)])
+def update_settings(req: SettingsUpdateRequest):
+    """Saves sensitive API keys and secrets encrypted in the SQLite secure vault."""
+    if req.gemini_api_key:
+        clean_key = req.gemini_api_key.strip()
+        database.save_secure_setting("GEMINI_API_KEY", clean_key)
+        settings.GEMINI_API_KEY = clean_key
+        gemini_analyzer.update_api_key(clean_key)
+
+    if req.kite_api_key:
+        clean_api_key = req.kite_api_key.strip()
+        database.save_secure_setting("KITE_API_KEY", clean_api_key)
+        settings.KITE_API_KEY = clean_api_key
+        kite_executor.api_key = clean_api_key
+        kite_executor._init_kite()
+
+    if req.kite_api_secret:
+        clean_secret = req.kite_api_secret.strip()
+        database.save_secure_setting("KITE_API_SECRET", clean_secret)
+        settings.KITE_API_SECRET = clean_secret
+
+    if req.kite_access_token:
+        clean_token = req.kite_access_token.strip()
+        database.save_secure_setting("KITE_ACCESS_TOKEN", clean_token)
+        settings.KITE_ACCESS_TOKEN = clean_token
+        kite_executor.access_token = clean_token
+        kite_executor.kite_engine.access_token = clean_token
+        if kite_executor.kite_client:
+            kite_executor.kite_client.set_access_token(clean_token)
+        elif kite_executor.api_key:
+            kite_executor._init_kite()
+
+    if req.trading_mode in ["PAPER", "LIVE"]:
+        settings.TRADING_MODE = req.trading_mode
+        kite_executor.mode = req.trading_mode
+        database.save_secure_setting("TRADING_MODE", req.trading_mode)
+
+    notification_service.update_config({
+        "telegram_bot_token": req.telegram_bot_token,
+        "telegram_chat_id": req.telegram_chat_id,
+        "discord_webhook_url": req.discord_webhook_url,
+        "slack_webhook_url": req.slack_webhook_url,
+        "office_mode": req.office_mode
+    })
+
+    modified_keys = []
+    if req.gemini_api_key:
+        modified_keys.append("GEMINI_API_KEY")
+    if req.kite_api_key:
+        modified_keys.append("KITE_API_KEY")
+    if req.kite_api_secret:
+        modified_keys.append("KITE_API_SECRET")
+    if req.kite_access_token:
+        modified_keys.append("KITE_ACCESS_TOKEN")
+    if req.trading_mode:
+        modified_keys.append("TRADING_MODE")
+    if any([req.telegram_bot_token, req.telegram_chat_id, req.discord_webhook_url, req.slack_webhook_url, req.office_mode is not None]):
+        modified_keys.append("NOTIFICATIONS")
+    log_config_saved("api/settings", modified_keys, req.trading_mode)
+
+    return {
+        "success": True,
+        "mode": kite_executor.mode,
+        "gemini_active": bool(gemini_analyzer.client),
+        "kite_active": kite_executor.is_authenticated(),
+        "office_mode": notification_service.config.office_mode
+    }
+
+
+@router.get("/api/kite/login-url", dependencies=[Depends(require_auth)])
+def get_kite_login_url():
+    """Generates Zerodha OAuth login URL."""
+    return {"login_url": kite_executor.get_login_url()}
+
+
+@router.post("/api/kite/session", dependencies=[Depends(require_auth)])
+def generate_kite_session(req: KiteSessionRequest):
+    """Exchanges OAuth request token for Zerodha daily access token and stores in vault."""
+    try:
+        session = kite_executor.set_session(req.request_token)
+        log_config_saved("api/kite/session", ["KITE_ACCESS_TOKEN"])
+        market_data_manager.refresh_live_quotes()
+        return {"success": True, "session": session}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/api/kite/balance", dependencies=[Depends(require_auth)])
+def get_kite_balance():
+    """
+    Fetches real-time authentic Zerodha Kite account margins and remaining balance.
+    Returns available cash, margin, utilised funds, and connection status.
+    """
+    return kite_executor.get_kite_margins()
+
+
+@router.post("/api/settings/mode", dependencies=[Depends(require_auth)])
+def update_trading_mode(req: ModeUpdateRequest):
+    """Instant switch between PAPER Sandbox and Zerodha Kite LIVE with persistent database storage."""
+    if req.trading_mode not in ["PAPER", "LIVE"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid mode. Must be 'PAPER' or 'LIVE'.")
+    settings.TRADING_MODE = req.trading_mode
+    kite_executor.mode = req.trading_mode
+    database.save_secure_setting("TRADING_MODE", req.trading_mode)
+    log_config_saved("api/settings/mode", ["TRADING_MODE"], req.trading_mode)
+    return {"success": True, "trading_mode": req.trading_mode}
+
+
+@router.get("/api/instruments", dependencies=[Depends(require_auth)])
+def get_instruments_list():
+    """Returns list of all configured trading instruments from instruments.json."""
+    return load_instruments_data()
+
+
+@router.post("/api/instruments/reload", dependencies=[Depends(require_auth)])
+def reload_instruments_endpoint():
+    """Hot-reloads instruments from instruments.json without server restart."""
+    market_data_manager.reload_instruments()
+    market_data_manager.refresh_live_quotes()
+    return {
+        "success": True,
+        "message": "Successfully hot-reloaded instruments from instruments.json.",
+        "instruments": market_data_manager.get_all_quotes()
+    }
